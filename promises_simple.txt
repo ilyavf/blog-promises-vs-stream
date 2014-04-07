@@ -1,0 +1,209 @@
+Lets look at JavaScript promises and try to build a simple flow that should handle multiple rejection of the same request.
+
+If you are not familiar with promises in JS I would recommend you reading the following posts: <a href="http://www.html5rocks.com/en/tutorials/es6/promises/">JavaScript Promises</a> and <a href="http://taoofcode.net/promise-anti-patterns/">Promise Anti-patterns</a>
+
+Here is a simple scenario we will implement:
+<div style="margin:-0.7em 0 1.5em 1em;color:#11669a;font-size:1.5em;">
+[code gutter=false]
+GIVEN: A view with a single Login button.
+
+WHEN User clicks Login
+AND  fails authorization
+THEN User should be able to click Login and attempt another 
+     authorization.
+
+WHEN User clicks Login
+AND  succeeds authorization
+THEN every next click should skip authorization call and 
+     just perform the success action.
+[/code]
+</div>
+
+*** In my code I will be using <a href="http://en.wikipedia.org/wiki/Dependency_injection">Dependency Injection</a> pattern and the implementation of javascript promises by kriskowal from <a href="http://github.com/kriskowal/q">here</a>.
+
+We can have our user resource to look like this:
+<div style="font-size:1.2em;margin: -1em 0 2em 0;">
+[code language="javascript"]
+function User (asyncLogin, q) {
+    var loginStatus;
+
+    return {
+        isLoggedIn: function () {
+            if (!loginStatus) {
+                loginStatus = q.defer();
+                asyncLogin(loginStatus);
+            }
+            return loginStatus.promise;
+        }
+    };
+}
+[/code]
+</div>
+
+And lets use a timeout for our asynchronous login functionality:
+<div style="font-size:1.2em;margin: -1em 0 2em 0;">
+[code language="javascript"]
+function asyncLogin (deferred) {
+    timeout(function () {
+        if (confirm('Do you want to be logged in?')) {
+            deferred.resolve(true);
+        } else {
+            deferred.reject('User did not authorize');
+        }
+    }, 100);
+}
+[/code]
+</div>
+
+Let our UI look like this: single "Login" button with onClickLogin handler returned by LoginHandler factory:
+<div style="font-size:1.2em;margin: -1em 0 2em 0;">
+[code language="javascript"]
+function LoginHandler (user) {
+    return function () {
+        user.isLoggedIn().then(function () {
+            alert('Successfully Logged in');
+        }, function (reason) {
+            alert('Error: ' + reason);
+        });
+    }
+}
+[/code]
+</div>
+
+Now if we initialize our mini app:
+<div style="font-size:1.2em;margin: -1em 0 2em 0;">
+[code language="javascript"]
+    var user = User(asyncLogin, Q),
+        onClickHandler = LoginHandler(user);
+
+    $('#loginBtn').click(onClickHandler);
+[/code]
+</div>
+
+then click on the Login button and login successfully, then all other clicks will alert "Success..." immediately.
+But if the first time we fail to login, then all further clicks will alert the error (also immediately).
+
+This is because once we created <i>loginStatus</i> promise (which could be rejected or resolved only once) <i>isLoggedIn()</i> is no longer capable to perform another asyncLogin attempt.
+
+Lets fix this.
+
+First, lets modify the async login function to have its own deferred object:
+<div style="font-size:1.2em;margin: -1em 0 2em 0;">
+[code language="javascript" highlight="2,10"]
+function asyncLogin () {
+    var deferred = q.defer();
+    timeout(function () {
+        if (confirm('Do you want to be logged in?')) {
+            deferred.resolve(true);
+        } else {
+            deferred.reject('User did not authorize');
+        }
+    }, 100);
+    return deferred.promise;
+}
+[/code]
+</div>
+
+And lets update our api function like this:
+<div style="font-size:1.2em;margin: -1em 0 2em 0;">
+[code language="javascript" highlight="8,9,10,11,12,13,14,15,16,17"]
+function User (asyncLogin, q) {
+    var loginStatus;
+
+    return {
+        isLoggedIn: function () {
+            if (!loginStatus) {
+                loginStatus = q.defer();
+                asyncLogin().then(function (result) {
+                    loginStatus.resolve(result);
+
+                }, function (reason) {
+                    // Notify subscribers about the failure:
+                    loginStatus.reject(reason);
+
+                    // And destroy the deferred object for this failed attempt:
+                    loginStatus = null;
+                });
+            }
+            return loginStatus.promise;
+        }
+    };
+}
+[/code]
+</div>
+
+Now if we start with unsuccessful login, every time we click Login button for the next attempt user.isLoggedIn() will create a new deferred and perform another async login.
+And Once we succeed in login then user.isLoggedIn() will immediately return the resolved promise without async login call.
+
+Here is a JSFiddle (http://jsfiddle.net/UYb6e/) and all the code together along with html is below. Later I will also provide a github link to angularjs app using the described pattern.
+
+<div style="font-size:1.2em;margin: -1em 0 2em 0;">
+[code language="html"]
+<button id="loginBtn">Login</button>
+
+<script src="http://cdnjs.cloudflare.com/ajax/libs/jquery/1.11.0/jquery.js"></script>
+<script src="http://cdnjs.cloudflare.com/ajax/libs/q.js/0.9.2/q.js"></script>
+
+<script>
+console.log('Started');
+$(function () {
+    console.log('Loaded. Initializing');
+    var asyncLogin = AsyncLogin(Q),
+        user = User(asyncLogin, Q),
+        onClickHandler = LoginHandler(user);
+
+    $('#loginBtn').click(onClickHandler);
+});
+
+function User(asyncLogin, q) {
+    console.log('User initialized');
+    var loginStatus;
+
+    return {
+        isLoggedIn: function () {
+            if (!loginStatus) {
+                loginStatus = q.defer();
+                asyncLogin().then(function (result) {
+                    loginStatus.resolve(result);
+
+                }, function (reason) {
+                    // Notify subscribers about failure:
+                    loginStatus.reject(reason);
+
+                    // And destroy the deferred object for this failed attempt:
+                    loginStatus = null;
+                });
+            }
+            return loginStatus.promise;
+        }
+    };
+}
+
+function AsyncLogin(q) {
+    console.log('AsyncLogin initialized with q: ' + typeof q);
+    return function () {
+        var deferred = q.defer();
+        setTimeout(function () {
+            if (confirm('Do you want to be logged in?')) {
+                deferred.resolve(true);
+            } else {
+                deferred.reject('User did not authorize');
+            }
+        }, 100);
+        return deferred.promise;
+    }
+}
+
+function LoginHandler(user) {
+    console.log('LoginHandler initialized with user: ' + typeof user);
+    return function () {
+        user.isLoggedIn().then(function () {
+            alert('Successfully Logged in');
+        }, function (reason) {
+            alert('Error: ' + reason);
+        });
+    }
+}
+</script>
+[/code]
+</div>

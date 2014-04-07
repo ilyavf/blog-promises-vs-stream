@@ -1,0 +1,74 @@
+<html>
+<head>
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/jquery/1.11.0/jquery.js"></script>
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/q.js/0.9.2/q.js"></script>
+</head>
+
+<body>
+
+<button id="loginBtn">Login</button>
+
+
+<script>
+    console.log('Started');
+    $(function(){
+        console.log('Loaded. Initializing');
+        var asyncLogin = AsyncLogin(Q),
+                user = User(asyncLogin, Q),
+                onClickHandler= LoginHandler(user);
+
+        $('#loginBtn').click(onClickHandler)
+    });
+
+    function User (asyncLogin, q) {
+        console.log('User initialized');
+        var loginStatus;
+
+        return {
+            isLoggedIn: function () {
+                if (!loginStatus) {
+                    loginStatus = q.defer();
+                    asyncLogin().then(function (result) {
+                        loginStatus.resolve(result);
+
+                    }, function (reason) {
+                        // Notify subscribers about failure:
+                        loginStatus.reject(reason);
+
+                        // And destroy the deferred object for this failed attempt:
+                        loginStatus = null;
+                    });
+                }
+                return loginStatus.promise;
+            }
+        };
+    }
+    function AsyncLogin (q) {
+        console.log('AsyncLogin initialized with q: ' + typeof q);
+        return function () {
+            var deferred = q.defer();
+            setTimeout( function () {
+                if (confirm('Do you want to be logged in?')) {
+                    deferred.resolve(true);
+                } else {
+                    deferred.reject('User did not authorize');
+                }
+            }, 100);
+            return deferred.promise;
+        }
+    }
+    function LoginHandler (user) {
+        console.log('LoginHandler initialized with user: ' + typeof user);
+        return function () {
+            user.isLoggedIn().then(function () {
+                alert('Successfully Logged in');
+            }, function (reason) {
+                alert('Error: ' + reason);
+            });
+        }
+    }
+
+</script>
+
+</body>
+</html>

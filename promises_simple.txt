@@ -1,28 +1,32 @@
 Lets look at JavaScript promises and try to build a simple flow that should handle multiple rejection of the same request.
 
+<strong>Why?</strong> When I first learned about promises in Javascript I was so excited that decided to use them everywhere: for data, business logic (flow), basically for everything that requires (or potentially could require) async actions. I don't have strong Node.js experience but I guess folks with this background deal with promises all the time. What I am not sure for now is how flexible and convenient promises are. When I first started to work with event streams (<a href="http://flapjax-lang.org/">Flapjax</a>, <a href="https://github.com/Reactive-Extensions/RxJS">RxJS</a>) I felt the power and could see a lot of advantages in defining a flow using them as well as building data abstraction. But can we rely on promises the same way?
+
+<strong>GOAL</strong>: By starting with this post what I want is to look at different cases to use promises for and to see how well they work out. I will also try to compare promise based implementation with event stream based one (using RxJS).
+
 If you are not familiar with promises in JS I would recommend you reading the following posts: <a href="http://www.html5rocks.com/en/tutorials/es6/promises/">JavaScript Promises</a> and <a href="http://taoofcode.net/promise-anti-patterns/">Promise Anti-patterns</a>
 
 Here is a simple scenario we will implement:
-<div style="margin:-0.7em 0 1.5em 1em;color:#11669a;font-size:1.5em;">
-[code gutter=false]
+<div style="margin:-.7em 0 1.5em 1em;color:#11669a;font-size:1.5em;">
+[code gutter="false"]
 GIVEN: A view with a single Login button.
 
 WHEN User clicks Login
 AND  fails authorization
-THEN User should be able to click Login and attempt another 
-     authorization.
+THEN User should be able to click Login and attempt
+     another authorization.
 
 WHEN User clicks Login
 AND  succeeds authorization
-THEN every next click should skip authorization call and 
+THEN every next click should skip authorization call and
      just perform the success action.
 [/code]
 </div>
 
-*** In my code I will be using <a href="http://en.wikipedia.org/wiki/Dependency_injection">Dependency Injection</a> pattern and the implementation of javascript promises by kriskowal from <a href="http://github.com/kriskowal/q">here</a>.
+*** In my code I will be using <a href="http://en.wikipedia.org/wiki/Dependency_injection">Dependency Injection</a> pattern and the implementation of javascript promises by Kris Kowal from <a href="http://github.com/kriskowal/q">here</a>.
 
 We can have our user resource to look like this:
-<div style="font-size:1.2em;margin: -1em 0 2em 0;">
+<div style="font-size:1.2em;margin:-1em 0 2em;">
 [code language="javascript"]
 function User (asyncLogin, q) {
     var loginStatus;
@@ -41,7 +45,7 @@ function User (asyncLogin, q) {
 </div>
 
 And lets use a timeout for our asynchronous login functionality:
-<div style="font-size:1.2em;margin: -1em 0 2em 0;">
+<div style="font-size:1.2em;margin:-1em 0 2em;">
 [code language="javascript"]
 function asyncLogin (deferred) {
     timeout(function () {
@@ -56,7 +60,7 @@ function asyncLogin (deferred) {
 </div>
 
 Let our UI look like this: single "Login" button with onClickLogin handler returned by LoginHandler factory:
-<div style="font-size:1.2em;margin: -1em 0 2em 0;">
+<div style="font-size:1.2em;margin:-1em 0 2em;">
 [code language="javascript"]
 function LoginHandler (user) {
     return function () {
@@ -71,7 +75,7 @@ function LoginHandler (user) {
 </div>
 
 Now if we initialize our mini app:
-<div style="font-size:1.2em;margin: -1em 0 2em 0;">
+<div style="font-size:1.2em;margin:-1em 0 2em;">
 [code language="javascript"]
     var user = User(asyncLogin, Q),
         onClickHandler = LoginHandler(user);
@@ -88,7 +92,7 @@ This is because once we created <i>loginStatus</i> promise (which could be rejec
 Lets fix this.
 
 First, lets modify the async login function to have its own deferred object:
-<div style="font-size:1.2em;margin: -1em 0 2em 0;">
+<div style="font-size:1.2em;margin:-1em 0 2em;">
 [code language="javascript" highlight="2,10"]
 function asyncLogin () {
     var deferred = q.defer();
@@ -105,7 +109,7 @@ function asyncLogin () {
 </div>
 
 And lets update our api function like this:
-<div style="font-size:1.2em;margin: -1em 0 2em 0;">
+<div style="font-size:1.2em;margin:-1em 0 2em;">
 [code language="javascript" highlight="8,9,10,11,12,13,14,15,16,17"]
 function User (asyncLogin, q) {
     var loginStatus;
@@ -137,8 +141,12 @@ And Once we succeed in login then user.isLoggedIn() will immediately return the 
 
 Here is a JSFiddle (http://jsfiddle.net/UYb6e/) and all the code together along with html is below. Later I will also provide a github link to angularjs app using the described pattern.
 
-<div style="font-size:1.2em;margin: -1em 0 2em 0;">
-[code language="html"]
+<strong>CONCLUSION</strong>
+
+As we can see promises can handle the described scenario. In terms of reactive programming what we did is we merged two event streams: UI interactions (button click to initiate login) and authorization requests (which could easily be an ajax call to a server api). We did have to think of a way of "merging" the streams - we created one series of promise for the login button action and another series of promise for the async call. But so far its not bad. In the next post I will try to see how to reach the same result with RxJS.
+
+<div style="font-size:1.2em;margin:-1em 0 2em;">
+[code language="html" collapse="true" title="Full source code"]
 <button id="loginBtn">Login</button>
 
 <script src="http://cdnjs.cloudflare.com/ajax/libs/jquery/1.11.0/jquery.js"></script>

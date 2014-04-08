@@ -1,7 +1,7 @@
 blog-promises-vs-stream
 =======================
 
-I will be creating a blog posts trying to compare javascript promises to event streams (?RxJS).
+I will be creating blog posts trying to compare javascript promises to event streams (?RxJS).
 
 1. JavaScript Promises: Handle Repeatedly Rejected Requests @ WordPress.com
 
